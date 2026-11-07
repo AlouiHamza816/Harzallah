@@ -1,0 +1,8 @@
+# Cloudflare Pages _redirects
+# Proxy /api/* vers le Cloudflare Worker
+# Remplacer https://didier-stock-api.alouihamza816.workers.dev par l'URL reelle apres deploiement du Worker
+# Exemple: https://didier-stock-api.ton-subdomain.workers.dev
+/api/* https://didier-stock-api.alouihamza816.workers.dev/api/:splat 200
+
+# SPA fallback Angular
+/* /index.html 200

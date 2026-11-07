@@ -1,0 +1,291 @@
+/* ── Design tokens ── */
+:root {
+  --clr-primary:    #3498db;
+  --clr-primary-dk: #2980b9;
+  --clr-success:    #27ae60;
+  --clr-warning:    #e67e22;
+  --clr-danger:     #e74c3c;
+  --clr-text:       #2c3e50;
+  --clr-muted:      #7f8c8d;
+  --clr-border:     #e8edf2;
+  --clr-bg:         #eef1f8;
+  --clr-card:       #ffffff;
+  --shadow-card:    0 2px 14px rgba(0, 0, 0, 0.07);
+  --radius-card:    10px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: var(--clr-bg);
+  color: var(--clr-text);
+}
+
+/* ── Page header ── */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid var(--clr-border);
+
+  h2 {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: var(--clr-text);
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    i { color: var(--clr-primary); font-size: 1.15rem; }
+  }
+}
+
+/* ── Card container ── */
+.card-content {
+  background: var(--clr-card);
+  border-radius: var(--radius-card);
+  padding: 1.5rem;
+  box-shadow: var(--shadow-card);
+  border: 1px solid var(--clr-border);
+  overflow-x: auto;
+}
+
+/* ── PrimeNG table header ── */
+.p-datatable .p-datatable-header {
+  background: white;
+  border: none;
+  padding: 0 0 1rem 0;
+}
+
+/* ── Table caption row (search on left, count badge on right) ── */
+.caption-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.item-count {
+  font-size: 0.79rem;
+  color: var(--clr-muted);
+  background: #f0f4f8;
+  padding: 0.22rem 0.7rem;
+  border-radius: 12px;
+  white-space: nowrap;
+  font-weight: 500;
+  border: 1px solid #e2e8f0;
+}
+
+/* ── Table body row hover ── */
+.p-datatable .p-datatable-tbody > tr {
+  transition: background 0.1s;
+  &:hover > td { background: #f7fafd !important; }
+}
+
+/* ── Responsive table ── */
+.p-datatable-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ── Status badges ── */
+.status-badge {
+  display: inline-block;
+  padding: 0.22rem 0.7rem;
+  border-radius: 20px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+
+  &.status-draft      { background: #f1f3f4; color: #5f6368; }
+  &.status-sent       { background: #fff3e0; color: #e65100; }
+  &.status-paid       { background: #e6f4ea; color: #188038; }
+  &.status-cancelled  { background: #fce8e6; color: #c5221f; }
+  &.status-received   { background: #e6f4ea; color: #188038; }
+  &.status-low        { background: #fef7e0; color: #b06000; }
+}
+
+/* ── Action buttons ── */
+.action-buttons {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: nowrap;
+}
+
+/* ── Form field ── */
+.field {
+  margin-bottom: 1.25rem;
+
+  label {
+    display: block;
+    margin-bottom: 0.4rem;
+    font-weight: 500;
+    color: #444;
+    font-size: 0.88rem;
+  }
+}
+
+/* ── Empty state (used in all table emptymessage slots) ── */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1.5rem;
+  text-align: center;
+
+  .empty-icon {
+    font-size: 2.75rem;
+    color: #c8d0dc;
+    margin-bottom: 0.85rem;
+  }
+  .empty-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #64748b;
+    margin-bottom: 0.35rem;
+  }
+  .empty-sub {
+    font-size: 0.85rem;
+    color: var(--clr-muted);
+    margin-bottom: 1.25rem;
+  }
+}
+
+/* ── Professional input styling (global) ── */
+.p-inputtext,
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+input[type="search"],
+input[type="tel"],
+textarea {
+  border: 1.5px solid #d1d5db !important;
+  border-radius: 7px !important;
+  padding: 0.52rem 0.75rem !important;
+  font-size: 0.875rem !important;
+  color: #1e293b !important;
+  background: #fff !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+  width: 100%;
+
+  &::placeholder { color: #9ca3af !important; font-style: normal !important; }
+
+  &:focus,
+  &:focus-visible {
+    outline: none !important;
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15) !important;
+  }
+
+  &:hover:not(:focus) { border-color: #94a3b8 !important; }
+  &:disabled { background: #f8fafc !important; color: #94a3b8 !important; cursor: not-allowed !important; }
+}
+
+/* PrimeNG Dropdown */
+.p-dropdown {
+  border: 1.5px solid #d1d5db !important;
+  border-radius: 7px !important;
+  transition: border-color 0.15s, box-shadow 0.15s !important;
+
+  &:hover { border-color: #94a3b8 !important; }
+  &.p-focus, &.p-inputwrapper-focus {
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15) !important;
+  }
+  .p-dropdown-label {
+    padding: 0.52rem 0.75rem !important;
+    font-size: 0.875rem !important;
+    color: #1e293b !important;
+    &.p-placeholder { color: #9ca3af !important; }
+  }
+}
+
+/* PrimeNG Calendar */
+.p-calendar .p-inputtext { border-radius: 7px !important; }
+
+/* PrimeNG InputNumber */
+.p-inputnumber .p-inputtext { border-radius: 7px !important; }
+
+/* PrimeNG Textarea */
+textarea.p-inputtextarea {
+  border-radius: 7px !important;
+  resize: vertical;
+}
+
+/* Search inputs inside tables */
+.table-search.p-inputtext { max-width: 320px; }
+
+/* ── PDF / Thermal print button ── */
+.btn-pdf {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  background: #7c3aed; color: #fff;
+  border: none; border-radius: 6px;
+  padding: 5px 12px; font-size: 0.78rem; font-weight: 700;
+  cursor: pointer; transition: background 0.15s;
+  white-space: nowrap;
+  &:hover { background: #6d28d9; }
+}
+
+/* ── Dialog ── */
+.p-dialog {
+  max-width: 95vw !important;
+  border-radius: 12px !important;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.18) !important;
+}
+.p-dialog .p-dialog-header {
+  background: #f8fafd;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--clr-border);
+  .p-dialog-title { font-size: 1rem; font-weight: 700; color: var(--clr-text); }
+}
+.p-dialog .p-dialog-content { padding: 1.25rem; }
+.p-dialog .p-dialog-footer {
+  padding: 0.875rem 1.25rem;
+  border-top: 1px solid var(--clr-border);
+  background: #f8fafd;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+/* ── Search input inside table caption ── */
+.table-search {
+  width: 100%;
+  max-width: 320px;
+}
+
+/* ── Responsive ── */
+@media (max-width: 600px) {
+  .page-header h2 { font-size: 1.1rem; }
+  .card-content { padding: 0.875rem; }
+
+  .grid > [class*='col-6'],
+  .grid > [class*='col-4'],
+  .grid > [class*='col-3'] {
+    width: 100% !important;
+    flex: 0 0 100% !important;
+    max-width: 100% !important;
+  }
+
+  .table-search { max-width: 100%; }
+  .caption-row { flex-direction: column; align-items: flex-start; }
+
+  .hide-mobile { display: none !important; }
+
+  .p-dialog { width: 100vw !important; margin: 0 !important; border-radius: 0 !important; }
+  .p-dialog .p-dialog-header { padding: 0.875rem 1rem; }
+  .p-dialog .p-dialog-content { padding: 0.75rem 1rem; }
+  .p-dialog .p-dialog-footer { padding: 0.75rem 1rem; }
+}
+
+@media (max-width: 960px) {
+  .hide-tablet { display: none !important; }
+}
