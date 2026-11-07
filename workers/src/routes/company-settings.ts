@@ -3,16 +3,30 @@ import type { AppEnv } from '../types';
 
 export const companySettingsRoutes = new Hono<AppEnv>();
 
+function mapSettings(row: Record<string, unknown>) {
+  return {
+    id: row.id,
+    companyName: row.company_name,
+    address: row.address ?? null,
+    phone: row.phone ?? null,
+    email: row.email ?? null,
+    nif: row.nif ?? null,
+    rib: row.rib ?? null,
+    logo: row.logo ?? null,
+    currency: row.currency ?? 'XAF',
+    taxRate: row.tax_rate ?? 0,
+  };
+}
+
 companySettingsRoutes.get('/', async (c) => {
-  let row = await c.env.DB.prepare('SELECT * FROM company_settings LIMIT 1').first();
+  let row = await c.env.DB.prepare('SELECT * FROM company_settings LIMIT 1').first<Record<string, unknown>>();
   if (!row) {
-    // Creer un enregistrement par defaut si absent
     await c.env.DB.prepare(
       "INSERT INTO company_settings (company_name) VALUES ('Mon Entreprise')"
     ).run();
-    row = await c.env.DB.prepare('SELECT * FROM company_settings LIMIT 1').first();
+    row = await c.env.DB.prepare('SELECT * FROM company_settings LIMIT 1').first<Record<string, unknown>>();
   }
-  return c.json(row);
+  return c.json(mapSettings(row!));
 });
 
 companySettingsRoutes.put('/', async (c) => {
@@ -41,5 +55,6 @@ companySettingsRoutes.put('/', async (c) => {
     ).run();
   }
 
-  return c.json(await c.env.DB.prepare('SELECT * FROM company_settings LIMIT 1').first());
+  const row = await c.env.DB.prepare('SELECT * FROM company_settings LIMIT 1').first<Record<string, unknown>>();
+  return c.json(mapSettings(row!));
 });

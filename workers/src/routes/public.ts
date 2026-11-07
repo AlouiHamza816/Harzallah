@@ -261,10 +261,9 @@ publicRoutes.get('/invoices', async (c) => {
   })));
 });
 
-publicRoutes.get('/invoices/:id/pdf', async (c) => {
-  const inv = await loadInvoice(c.env.DB, c.req.param('id'));
-  if (!inv) return c.json({ message: 'Facture non trouvee' }, 404);
-  return c.json(inv);
+// PDF genere cote client (jsPDF + html2canvas) — le service Angular bascule en fallback sur 501
+publicRoutes.get('/invoices/:id/pdf', (c) => {
+  return c.json({ message: 'PDF genere cote client' }, 501);
 });
 
 publicRoutes.get('/invoices/:id', async (c) => {

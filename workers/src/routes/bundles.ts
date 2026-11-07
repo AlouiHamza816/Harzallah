@@ -24,8 +24,10 @@ async function loadBundle(db: D1Database, id: number | string) {
     active: bundle.active === 1,
     items: items.map((i: Record<string, unknown>) => ({
       id: i.id,
+      productId: i.product_id,
+      productName: i.name ?? null,
+      productUnit: i.unit ?? null,
       quantity: i.quantity,
-      product: { id: i.product_id, reference: i.reference, name: i.name, sellingPrice: i.selling_price, unit: i.unit }
     }))
   };
 }
