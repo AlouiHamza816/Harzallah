@@ -464,11 +464,6 @@ export class ThermalPrintService {
     const r1BotY = MT + r1H;
     const hdrBotY= MT + hdrH;
 
-    // Bordures header
-    doc.setDrawColor(0); doc.setLineWidth(0.3);
-    doc.rect(ML, MT, CW, hdrH);
-    doc.line(midX, MT, midX, hdrBotY);
-    doc.line(ML, r1BotY, PW - MR, r1BotY);
 
     // Logo
     if (co.logo && co.logo.includes(',')) {
@@ -595,8 +590,6 @@ export class ThermalPrintService {
       if (showTVA) totRow(`TVA (${inv.taxRate}%)`, `${f3(inv.totalTVA)} ${cur}`);
       totRow('Timbre fiscal', `${f3(inv.stampDuty)} ${cur}`);
 
-      doc.setDrawColor(0); doc.setLineWidth(0.5);
-      doc.line(totX, y - 1.5, PW - MR, y - 1.5);
       totRow('TOTAL TTC', `${f3(inv.totalTTC)} ${cur}`, true, 12);
 
       // Montant en lettres
