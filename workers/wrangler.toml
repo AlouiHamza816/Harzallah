@@ -10,7 +10,7 @@ database_id = "c9a0daaf-c5b7-49d2-836b-f4dd96369782"
 
 [vars]
 # CORS_ORIGINS = "https://ton-projet.pages.dev,https://tondomaine.com"
-CORS_ORIGINS = "*"
+CORS_ORIGINS = "https://harzallah.pages.dev,https://didier-stock-api.alouihamza816.workers.dev"
 
 # JWT_SECRET est un secret Wrangler — NE PAS mettre ici
 # Definir via : wrangler secret put JWT_SECRET
