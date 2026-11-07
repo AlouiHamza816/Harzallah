@@ -376,192 +376,230 @@ export class ThermalPrintService {
   }
 
   private async doPrintA4(inv: any): Promise<void> {
-    const co = this.settings || {};
-    const cur = this.currency;
+    const co   = this.settings || {};
+    const cur  = this.currency;
+    const f3   = (n: any) => Number(n || 0).toFixed(3);
+
     const typeLabel =
-      inv.type === 'FACTURE'      ? 'FACTURE' :
-      inv.type === 'DEVIS'        ? 'DEVIS' :
-      inv.type === 'BON_SORTIE'   ? 'DEVIS' :
-      inv.type === 'BON_COMMANDE' ? 'BON DE COMMANDE' :
-                                    'BON DE LIVRAISON';
+      inv.type === 'FACTURE'       ? 'FACTURE' :
+      inv.type === 'DEVIS'         ? 'DEVIS' :
+      inv.type === 'BON_SORTIE'    ? 'DEVIS' :
+      inv.type === 'BON_COMMANDE'  ? 'BON DE COMMANDE' :
+                                     'BON DE LIVRAISON';
 
-    const isMvt = inv.type === 'BON_SORTIE' && !inv.customerName;
-    const isBonSortie = inv.type === 'BON_SORTIE' || (inv.type === 'DEVIS' && !!inv.supplierName);
+    const docWord =
+      inv.type === 'FACTURE'       ? 'la présente facture' :
+      inv.type === 'BON_LIVRAISON' ? 'le présent bon de livraison' :
+      inv.type === 'BON_COMMANDE'  ? 'le présent bon de commande' :
+                                     'le présent devis';
+
+    const isMvt          = inv.type === 'BON_SORTIE' && !inv.customerName;
+    const isBonSortie    = inv.type === 'BON_SORTIE' || (inv.type === 'DEVIS' && !!inv.supplierName);
     const isBonLivraison = inv.type === 'BON_LIVRAISON';
-    const clientLabel = (inv.type === 'BON_COMMANDE' || isBonSortie) ? 'Fournisseur' : 'Client';
-    // isBonLivraison kept for driver/truck block only — same totals structure as FACTURE
-    const isUnpaid = inv.status === 'SENT';
+    const clientLabel    = (inv.type === 'BON_COMMANDE' || isBonSortie) ? 'Fournisseur' : 'Client';
+    const partyName      = isBonSortie ? (inv.supplierName    || '-') : (inv.customerName    || '-');
+    const partyAddress   = isBonSortie ?  inv.supplierAddress         :  inv.customerAddress;
+    const partyNif       = isBonSortie ?  null                        :  inv.customerNif;
 
-    // A real Invoice of type DEVIS ("Bon de Sortie") references a supplier directly;
-    // the synthetic BON_COMMANDE object (from printPurchaseOrder) carries the supplier
-    // in the customerName/customerNif fields instead.
-    const partyName    = isBonSortie ? (inv.supplierName || '-') : (inv.customerName || '-');
-    const partyAddress = isBonSortie ? inv.supplierAddress : inv.customerAddress;
-    const partyNif     = isBonSortie ? null : inv.customerNif;
+    const dateStr     = new Date(inv.date).toLocaleDateString('fr-FR');
+    const companyName = (co.companyName || 'Mon Entreprise').toUpperCase();
 
-    const dateStr = new Date(inv.date).toLocaleDateString('fr-FR');
-    const companyName = (co.companyName || 'NEW-BAT HARZALLAH').toUpperCase();
+    const showTVA      = !isMvt && (inv.taxRate      || 0) > 0;
+    const showDiscount = !isMvt && (inv.globalDiscount || 0) > 0;
+    const amountWords  = this.capitalize(this.numberToWords(inv.totalTTC || 0, cur));
 
-    const rowsHtml = (inv.lines || []).map((l: any) => {
+    // ── Tableau produits ──────────────────────────────────────
+    const thHtml = isMvt
+      ? `<tr><th style="width:80%">Désignation</th><th class="r" style="width:20%">QTE</th></tr>`
+      : `<tr>
+           <th style="width:37%">Désignation</th>
+           <th class="r" style="width:9%">QTE</th>
+           <th class="c" style="width:16%">DIM</th>
+           <th class="r" style="width:19%">P.unitaire</th>
+           <th class="r" style="width:19%">P.total</th>
+         </tr>`;
+
+    const tdHtml = (inv.lines || []).map((l: any) => {
       const disc = l.discountPercent > 0 ? ` <span class="disc">(-${l.discountPercent}%)</span>` : '';
       if (isMvt) {
-        return `<tr><td>${l.description || '-'}</td><td class="col-num">${l.quantity}</td></tr>`;
+        return `<tr><td>${l.description || '-'}</td><td class="r">${l.quantity}</td></tr>`;
       }
       return `<tr>
         <td>${l.description || '-'}${disc}</td>
-        <td class="col-num">${l.quantity}</td>
-        <td class="col-center">${l.dimension || ''}</td>
-        <td class="col-num">${this.fmt(l.unitPrice || 0)}</td>
-        <td class="col-num">${this.fmt(l.totalHT || 0)}</td>
+        <td class="r">${l.quantity}</td>
+        <td class="c">${l.dimension || ''}</td>
+        <td class="r">${f3(l.unitPrice)}</td>
+        <td class="r">${f3(l.totalHT)}</td>
       </tr>`;
     }).join('');
 
-    const tableHeadHtml = isMvt
-      ? `<tr><th style="width:80%">Désignation</th><th class="col-num" style="width:20%">QTE</th></tr>`
-      : `<tr>
-          <th style="width:37%">Désignation</th>
-          <th class="col-num" style="width:9%">QTE</th>
-          <th class="col-center" style="width:16%">DIM</th>
-          <th class="col-num" style="width:19%">P.unitaire</th>
-          <th class="col-num" style="width:19%">P.total</th>
-        </tr>`;
+    // ── Totaux ────────────────────────────────────────────────
+    const totHtml = isMvt ? '' : `
+      <div class="tot-wrap">
+        <div class="tots">
+          <div class="tot"><span>Total HT</span><span>${f3(inv.totalHT)} ${cur}</span></div>
+          ${showDiscount ? `<div class="tot"><span>Remise (${inv.globalDiscount}%)</span><span>- ${f3((inv.totalHT||0)*(inv.globalDiscount||0)/100)} ${cur}</span></div>` : ''}
+          ${showTVA      ? `<div class="tot"><span>TVA (${inv.taxRate}%)</span><span>${f3(inv.totalTVA)} ${cur}</span></div>` : ''}
+          <div class="tot"><span>Timbre fiscal</span><span>${f3(inv.stampDuty)} ${cur}</span></div>
+          <div class="tot grand"><span>TOTAL TTC</span><span>${f3(inv.totalTTC)} ${cur}</span></div>
+        </div>
+      </div>`;
 
-    const showTVA      = !isMvt && (inv.taxRate || 0) > 0;
-    const showDiscount = !isMvt && (inv.globalDiscount || 0) > 0;
-
-    const docWord =
-      inv.type === 'FACTURE'      ? 'la présente facture' :
-      inv.type === 'BON_LIVRAISON' ? 'le présent bon de livraison' :
-      inv.type === 'BON_COMMANDE'  ? 'le présent bon de commande' :
-                                      'le présent devis';
-
-    const totalsHtml = isMvt ? '' : `
-      <div class="a4-totals">
-        <div class="row"><span>Total HT</span><span>${this.fmt(inv.totalHT || 0)} ${cur}</span></div>
-        ${showDiscount ? `<div class="row"><span>Remise (${inv.globalDiscount}%)</span><span>- ${this.fmt((inv.totalHT || 0) * (inv.globalDiscount || 0) / 100)} ${cur}</span></div>` : ''}
-        ${showTVA ? `<div class="row"><span>TVA (${inv.taxRate}%)</span><span>${this.fmt(inv.totalTVA || 0)} ${cur}</span></div>` : ''}
-        <div class="row"><span>Timbre fiscal</span><span>${this.fmt(inv.stampDuty || 0)} ${cur}</span></div>
-        <div class="row grand"><span>TOTAL TTC</span><span>${this.fmt(inv.totalTTC || 0)} ${cur}</span></div>
-      </div>
-      <div class="a4-words">Arrêté ${docWord} à la somme de ${this.numberToWords(inv.totalTTC || 0, cur)}.</div>`;
-
+    // ── CSS — layout identique au PDF Java ────────────────────
+    const W = this.A4_W_PX;
     const css = `
       * { box-sizing: border-box; margin: 0; padding: 0; }
-      .a4 { font-family: Calibri, Arial, Helvetica, sans-serif; background: #fff; color: #1a1a1a;
-            width: ${this.A4_W_PX}px; padding: 55px 60px; font-size: 13px; line-height: 1.5; overflow: hidden; }
-      .a4-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 16px; padding-bottom: 14px; border-bottom: 2px solid #1a3a8f; }
-      .a4-company { font-family: 'Times New Roman', Times, serif; color: #1a3a8f; line-height: 1.7;
-                    flex: 0 1 380px; max-width: 380px; }
-      .a4-company-name { font-size: 15px; font-weight: 700; }
-      .a4-company-sub { font-size: 11.5px; font-style: italic; }
-      .a4-company-line { font-size: 12.5px; font-weight: 700; }
-      .a4-right-col { text-align: right; flex: 0 1 260px; max-width: 260px; }
-      .a4-logo { max-width: 220px; max-height: 170px; object-fit: contain; margin-left: auto; margin-bottom: 10px; }
-      .a4-party { font-size: 12px; line-height: 1.8; word-wrap: break-word; }
+      body { margin: 0; padding: 0; width: ${W}px; }
 
-      .a4-doc-title { font-size: 20px; font-weight: 700; color: #1a3a8f; margin: 14px 0 18px; }
+      .a4 {
+        font-family: Arial, Helvetica, sans-serif;
+        background: #fff; color: #000;
+        width: ${W}px; padding: 36px 38px;
+        font-size: 11px; line-height: 1.4;
+      }
 
-      table.a4-lines { width: 100%; table-layout: fixed; border-collapse: collapse; margin-bottom: 14px; font-size: 12.5px; border-top: 2px solid #1a3a8f; }
-      table.a4-lines thead { background: #ebf0ff; }
-      table.a4-lines th { text-align: left; padding: 6px 8px 6px 4px; font-weight: 700; color: #1a3a8f; border-bottom: 2px solid #1a3a8f; }
-      table.a4-lines td { padding: 5px 8px 5px 4px; vertical-align: top; overflow-wrap: break-word; border-bottom: 1px solid #e8ecf4; }
-      table.a4-lines tbody tr:last-child td { border-bottom: none; }
-      table.a4-lines .col-num { text-align: right; }
-      table.a4-lines .col-center { text-align: center; }
-      .disc { color: #b00; font-size: 11px; }
+      /* ── HEADER 2×2 (table HTML pour fiabilité html2canvas) ── */
+      .hdr { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+      .hdr td { border: 0.6px solid #000; padding: 8px 10px; vertical-align: top; }
+      .hdr-logo { width: 54%; }
+      .hdr-logo img { max-width: 210px; max-height: 90px; object-fit: contain; display: block; }
+      .hdr-doctype { width: 46%; text-align: right; vertical-align: middle; }
+      .hdr-doctype-title { font-size: 17px; font-weight: 900; color: #1a3a8f; }
+      .hdr-doctype-line  { font-size: 10.5px; margin-top: 4px; }
+      .hdr-co { font-family: 'Times New Roman', Times, serif; color: #1a3a8f; }
+      .hdr-co-name { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+      .hdr-co-sub  { font-size: 9.5px; font-style: italic; }
+      .hdr-co-line { font-size: 10px; font-weight: 700; margin-top: 3px; }
+      .hdr-cl-label { font-size: 10px; font-weight: 700; color: #1a3a8f; margin-bottom: 4px; }
+      .hdr-cl-name  { font-size: 11px; font-weight: 700; margin-bottom: 3px; }
+      .hdr-cl-line  { font-size: 10px; margin-top: 2px; }
 
-      .a4-totals { margin-left: auto; width: 280px; margin-top: 14px; }
-      .a4-totals .row { display: flex; justify-content: space-between; padding: 5px 0; font-size: 12.5px; border-bottom: 1px solid #e8ecf4; }
-      .a4-totals .row:last-child { border-bottom: none; }
-      .a4-totals .grand { font-weight: 700; color: #1a3a8f; border-top: 2px solid #1a3a8f; border-bottom: none; padding-top: 8px; }
+      /* ── TABLE PRODUITS ── */
+      table.tbl { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 11.5px; margin-bottom: 10px; border-top: 2px solid #1a3a8f; }
+      table.tbl thead { background: #ebf0ff; }
+      table.tbl th { font-weight: 700; color: #1a3a8f; padding: 6px 4px; border-bottom: 2px solid #1a3a8f; text-align: left; }
+      table.tbl th.r { text-align: right; }
+      table.tbl th.c { text-align: center; }
+      table.tbl td { padding: 5px 4px; vertical-align: top; border-bottom: 1px solid #d2dcf0; overflow-wrap: break-word; word-break: break-word; }
+      table.tbl td.r { text-align: right; }
+      table.tbl td.c { text-align: center; }
+      table.tbl tbody tr:last-child td { border-bottom: none; }
+      .disc { color: #b00; font-size: 10px; }
 
-      .a4-words { font-size: 12.5px; font-style: italic; margin: 14px 0; }
+      /* ── TOTAUX (colonne droite) ── */
+      .tot-wrap { display: flex; justify-content: flex-end; margin-top: 14px; }
+      .tots { width: 265px; }
+      .tot { display: flex; justify-content: space-between; padding: 4px 0; font-size: 11.5px; border-bottom: 1px solid #e8ecf4; }
+      .tot:last-child { border-bottom: none; }
+      .tot.grand { font-weight: 700; border-top: 2px solid #000; border-bottom: none; padding-top: 7px; margin-top: 2px; }
 
-      .a4-extra { font-size: 12.5px; margin: 14px 0; }
-      .a4-notes { font-size: 12px; color: #333; margin: 14px 0; }
+      /* ── MONTANT EN LETTRES ── */
+      .words { font-size: 11px; font-style: italic; margin: 12px 0 0; }
 
-      .a4-unpaid { display: inline-block; font-size: 12px; font-weight: 700; color: #c00;
-                   border: 1px solid #c00; padding: 3px 10px; margin: 10px 0; text-transform: uppercase; }
+      /* ── NOTES / EXTRA ── */
+      .notes { font-size: 11px; color: #333; margin: 12px 0; }
+      .extra { font-size: 11.5px; margin: 12px 0; }
+
+      /* ── SIGNATURE ── */
+      .sig { text-align: right; margin-top: 28px; font-size: 10.5px; font-weight: 700; color: #000; }
     `;
 
+    // ── HTML — layout identique au PDF Java ──────────────────
     const bodyHtml = `
-      <div class="a4-header">
-        <div class="a4-company">
-          <div class="a4-company-name">${companyName}</div>
-          <div class="a4-company-sub">${co.address || ''}</div>
-          ${co.nif ? `<div class="a4-company-line">MF : ${co.nif}</div>` : ''}
-          ${co.rib ? `<div class="a4-company-line">RIB : ${co.rib}</div>` : ''}
-          ${co.phone ? `<div class="a4-company-line">GSM : ${co.phone}</div>` : ''}
-        </div>
-        <div class="a4-right-col">
-          ${co.logo ? `<img class="a4-logo" src="${co.logo}" />` : ''}
-          <div>Date : ${dateStr}</div>
-          ${inv.dueDate ? `<div>Échéance : ${new Date(inv.dueDate).toLocaleDateString('fr-FR')}</div>` : ''}
-          ${!isMvt ? `
-          <div class="a4-party">
-            <div>${clientLabel} : ${partyName}</div>
-            ${partyNif ? `<div>Mat. Fiscal : ${partyNif}</div>` : ''}
-            ${partyAddress ? `<div>Adresse : ${partyAddress}</div>` : ''}
-          </div>` : ''}
-        </div>
-      </div>
+      <div class="a4">
+        <!-- HEADER 2×2 bordé -->
+        <table class="hdr" cellspacing="0" cellpadding="0">
+          <tr>
+            <td class="hdr-logo">
+              ${co.logo ? `<img src="${co.logo}" alt="logo" />` : '&nbsp;'}
+            </td>
+            <td class="hdr-doctype">
+              <div class="hdr-doctype-title">${typeLabel}</div>
+              ${inv.number ? `<div class="hdr-doctype-line">N° : ${inv.number}</div>` : ''}
+              <div class="hdr-doctype-line">Date : ${dateStr}</div>
+              ${inv.dueDate ? `<div class="hdr-doctype-line">Échéance : ${new Date(inv.dueDate).toLocaleDateString('fr-FR')}</div>` : ''}
+            </td>
+          </tr>
+          <tr>
+            <td class="hdr-co">
+              <div class="hdr-co-name">${companyName}</div>
+              ${co.address ? `<div class="hdr-co-sub">${co.address}</div>` : ''}
+              ${co.nif   ? `<div class="hdr-co-line">MF : ${co.nif}</div>`   : ''}
+              ${co.rib   ? `<div class="hdr-co-line">RIB : ${co.rib}</div>`  : ''}
+              ${co.phone ? `<div class="hdr-co-line">GSM : ${co.phone}</div>`: ''}
+            </td>
+            <td>
+              <div class="hdr-cl-label">${clientLabel} :</div>
+              <div class="hdr-cl-name">${partyName}</div>
+              ${partyNif     ? `<div class="hdr-cl-line">MF : ${partyNif}</div>`         : ''}
+              ${partyAddress ? `<div class="hdr-cl-line">Adresse : ${partyAddress}</div>`: ''}
+            </td>
+          </tr>
+        </table>
 
-      <div class="a4-doc-title">${typeLabel} : ${inv.number || ''}</div>
+        <!-- TABLEAU PRODUITS -->
+        <table class="tbl">
+          <thead>${thHtml}</thead>
+          <tbody>${tdHtml}</tbody>
+        </table>
 
-      <table class="a4-lines">
-        <thead>${tableHeadHtml}</thead>
-        <tbody>${rowsHtml}</tbody>
-      </table>
+        <!-- NOTES -->
+        ${inv.notes ? `<div class="notes">Notes : ${inv.notes}</div>` : ''}
 
-      ${totalsHtml}
+        <!-- CHAUFFEUR / CAMION (Bon de Livraison) -->
+        ${isBonLivraison && (inv.driverName || inv.truckPlate) ? `
+        <div class="extra">
+          ${inv.driverName ? `Nom de chauffeur : ${inv.driverName}<br>` : ''}
+          ${inv.truckPlate ? `Série de camion : ${inv.truckPlate}`      : ''}
+        </div>` : ''}
 
-      ${isBonLivraison && (inv.driverName || inv.truckPlate) ? `
-      <div class="a4-extra">
-        ${inv.driverName ? `Nom de chauffeur : ${inv.driverName}<br>` : ''}
-        ${inv.truckPlate ? `Série de camion : ${inv.truckPlate}` : ''}
-      </div>` : ''}
+        <!-- TOTAUX -->
+        ${totHtml}
 
-      ${inv.notes ? `<div class="a4-notes">Notes : ${inv.notes}</div>` : ''}
+        <!-- MONTANT EN LETTRES -->
+        ${!isMvt ? `<div class="words">Arrêté ${docWord} à la somme de ${amountWords}.</div>` : ''}
 
-`;
+        <!-- SIGNATURE -->
+        ${!isMvt ? `<div class="sig">Signature et cachet :</div>` : ''}
+      </div>`;
 
-    // Render in an isolated same-origin iframe rather than a div appended to the host page.
-    // A plain div picks up the app's global stylesheet (PrimeNG theme etc.) since <style> tags
-    // are never scoped to their container, which was silently overriding table/flex layout rules
-    // and clipping the right side of the page. An iframe has its own document, immune to that.
+    // ── Rendu iframe isolé (immunisé contre les CSS PrimeNG) ──
     const iframe = document.createElement('iframe');
-    iframe.style.cssText = `position:fixed;left:-9999px;top:0;width:${this.A4_W_PX}px;height:100px;border:0;`;
+    // position:absolute évite le bug de viewport sur position:fixed hors-écran
+    iframe.style.cssText = `position:absolute;left:-9999px;top:0;width:${W}px;height:200px;border:0;visibility:hidden;`;
     document.body.appendChild(iframe);
 
     try {
       const idoc = iframe.contentDocument!;
       idoc.open();
-      idoc.write(`<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;padding:0;}${css}</style></head><body><div class="a4">${bodyHtml}</div></body></html>`);
+      // La largeur est forcée sur html+body pour que offsetWidth == A4_W_PX
+      idoc.write(`<!doctype html><html><head><meta charset="utf-8">
+        <style>html,body{margin:0;padding:0;width:${W}px;}${css}</style>
+        </head><body>${bodyHtml}</body></html>`);
       idoc.close();
 
-      await new Promise(r => setTimeout(r, 200));
+      // Attendre le rendu complet (images + polices)
+      await new Promise(r => setTimeout(r, 350));
 
       const target = idoc.querySelector('.a4') as HTMLElement;
-      const w = target.scrollWidth;
-      const h = target.scrollHeight;
+      const h = target.offsetHeight;
       iframe.style.height = h + 'px';
 
       const canvas = await html2canvas(target, {
         scale: 2,
         backgroundColor: '#ffffff',
         useCORS: true,
-        width: w,
+        width: W,          // largeur fixe — pas scrollWidth (bugué hors-écran)
         height: h,
-        windowWidth: w,
-        windowHeight: h
+        windowWidth: W,
+        windowHeight: h,
       });
 
       const pdfW = 210;
       const pdfH = Math.ceil((canvas.height / canvas.width) * pdfW * 100) / 100;
-
-      const pdf = new jsPDF({ unit: 'mm', format: [pdfW, pdfH], orientation: 'portrait' });
+      const pdf  = new jsPDF({ unit: 'mm', format: [pdfW, pdfH], orientation: 'portrait' });
       pdf.addImage(canvas.toDataURL('image/jpeg', 0.97), 'JPEG', 0, 0, pdfW, pdfH);
-      pdf.save(`${typeLabel}-${inv.number || 'document'}.pdf`);
+      pdf.save(`${typeLabel.replace(/ /g, '_')}-${inv.number || 'document'}.pdf`);
     } finally {
       document.body.removeChild(iframe);
     }
