@@ -115,9 +115,20 @@ async function applyStockForLines(db: D1Database, lines: Record<string, unknown>
 // ============================================================
 
 publicRoutes.get('/settings', async (c) => {
-  const row = await c.env.DB.prepare('SELECT * FROM company_settings LIMIT 1').first();
-  if (!row) return c.json({ name: 'Mon Entreprise', currency: 'DZD' });
-  return c.json(row);
+  const row = await c.env.DB.prepare('SELECT * FROM company_settings LIMIT 1').first<Record<string, unknown>>();
+  if (!row) return c.json({ companyName: 'Mon Entreprise', currency: 'DZD', taxRate: 0 });
+  return c.json({
+    id: row.id,
+    companyName: row.company_name,
+    address: row.address ?? null,
+    phone: row.phone ?? null,
+    email: row.email ?? null,
+    nif: row.nif ?? null,
+    rib: row.rib ?? null,
+    logo: row.logo ?? null,
+    currency: row.currency ?? 'DZD',
+    taxRate: row.tax_rate ?? 0,
+  });
 });
 
 // ============================================================
@@ -164,11 +175,13 @@ publicRoutes.get('/suppliers', async (c) => {
 
 publicRoutes.get('/products', async (c) => {
   const { results } = await c.env.DB.prepare(`
-    SELECT p.id, p.reference, p.name, p.description, p.price, p.stock_quantity,
-           p.low_stock_threshold, p.unit, p.category_id,
+    SELECT p.id, p.reference, p.name, p.description,
+           p.selling_price, p.purchase_price, p.stock_quantity,
+           p.alert_threshold, p.unit, p.category_id,
            c.name AS category_name
     FROM products p
     LEFT JOIN categories c ON c.id = p.category_id
+    WHERE p.active = 1
     ORDER BY p.name
   `).all();
   return c.json(results.map((r: Record<string, unknown>) => ({
@@ -176,13 +189,14 @@ publicRoutes.get('/products', async (c) => {
     reference: r.reference,
     name: r.name,
     description: r.description ?? null,
-    price: r.price,
+    sellingPrice: r.selling_price,
+    purchasePrice: r.purchase_price,
     stockQuantity: r.stock_quantity,
-    lowStockThreshold: r.low_stock_threshold,
+    alertThreshold: r.alert_threshold,
     unit: r.unit ?? null,
     categoryId: r.category_id ?? null,
     categoryName: r.category_name ?? null,
-    lowStock: Number(r.stock_quantity) <= Number(r.low_stock_threshold),
+    lowStock: Number(r.stock_quantity) <= Number(r.alert_threshold),
   })));
 });
 
@@ -192,13 +206,14 @@ publicRoutes.get('/products', async (c) => {
 
 publicRoutes.get('/bundles', async (c) => {
   const { results: bundles } = await c.env.DB.prepare(
-    'SELECT * FROM bundles ORDER BY name'
+    'SELECT * FROM product_bundles WHERE active = 1 ORDER BY name'
   ).all();
 
   const out = [];
   for (const b of bundles as Record<string, unknown>[]) {
     const { results: items } = await c.env.DB.prepare(`
-      SELECT bi.*, p.name AS product_name, p.reference AS product_ref, p.price AS product_price
+      SELECT bi.*, p.name AS product_name, p.reference AS product_ref,
+             p.selling_price AS product_price, p.purchase_price AS product_purchase_price
       FROM bundle_items bi
       LEFT JOIN products p ON p.id = bi.product_id
       WHERE bi.bundle_id = ?
@@ -207,7 +222,7 @@ publicRoutes.get('/bundles', async (c) => {
       id: b.id,
       name: b.name,
       description: b.description ?? null,
-      price: b.price,
+      sellingPrice: b.selling_price,
       items: items.map((i: Record<string, unknown>) => ({
         id: i.id,
         productId: i.product_id,
