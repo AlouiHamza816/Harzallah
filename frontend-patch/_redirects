@@ -1,0 +1,11 @@
+# Cloudflare Pages _redirects
+# Ce fichier doit etre place dans didier-stock-frontend/src/
+# et reference dans angular.json > assets
+
+# Proxy /api/* vers le Cloudflare Worker
+# IMPORTANT: remplacer https://didier-stock-api.alouihamza816.workers.dev par l'URL reelle du Worker apres deploiement
+# Exemple: https://didier-stock-api.ton-subdomain.workers.dev
+/api/* https://didier-stock-api.alouihamza816.workers.dev/api/:splat 200
+
+# SPA fallback — toutes les routes Angular vers index.html
+/* /index.html 200

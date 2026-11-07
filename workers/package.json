@@ -1,0 +1,24 @@
+{
+  "name": "didier-stock-api",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:migrate": "wrangler d1 execute harzallah-stock-db --file=../database/schema.sql",
+    "db:seed": "wrangler d1 execute harzallah-stock-db --file=../database/seed.sql",
+    "db:migrate:remote": "wrangler d1 execute harzallah-stock-db --remote --file=../database/schema.sql",
+    "db:seed:remote": "wrangler d1 execute harzallah-stock-db --remote --file=../database/seed.sql",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "hono": "^4.6.0",
+    "bcryptjs": "^2.4.3"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241127.0",
+    "@types/bcryptjs": "^2.4.6",
+    "typescript": "^5.5.0",
+    "wrangler": "^3.80.0"
+  }
+}
