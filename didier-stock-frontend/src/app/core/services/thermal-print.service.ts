@@ -375,10 +375,14 @@ export class ThermalPrintService {
     return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // doPrintA4 — génération PDF native jsPDF (sans html2canvas)
+  // Layout identique au Java InvoicePdfService (PDFBox)
+  // ─────────────────────────────────────────────────────────────────────────
   private async doPrintA4(inv: any): Promise<void> {
-    const co   = this.settings || {};
-    const cur  = this.currency;
-    const f3   = (n: any) => Number(n || 0).toFixed(3);
+    const co  = this.settings || {};
+    const cur = this.currency;
+    const f3  = (n: any) => Number(n || 0).toFixed(3);
 
     const typeLabel =
       inv.type === 'FACTURE'       ? 'FACTURE' :
@@ -404,204 +408,207 @@ export class ThermalPrintService {
     const dateStr     = new Date(inv.date).toLocaleDateString('fr-FR');
     const companyName = (co.companyName || 'Mon Entreprise').toUpperCase();
 
-    const showTVA      = !isMvt && (inv.taxRate      || 0) > 0;
+    const showTVA      = !isMvt && (inv.taxRate       || 0) > 0;
     const showDiscount = !isMvt && (inv.globalDiscount || 0) > 0;
     const amountWords  = this.capitalize(this.numberToWords(inv.totalTTC || 0, cur));
 
-    // ── Tableau produits ──────────────────────────────────────
-    const thHtml = isMvt
-      ? `<tr><th style="width:80%">Désignation</th><th class="r" style="width:20%">QTE</th></tr>`
-      : `<tr>
-           <th style="width:37%">Désignation</th>
-           <th class="r" style="width:9%">QTE</th>
-           <th class="c" style="width:16%">DIM</th>
-           <th class="r" style="width:19%">P.unitaire</th>
-           <th class="r" style="width:19%">P.total</th>
-         </tr>`;
+    // ────────────────────────────────────────────────────────────
+    // jsPDF natif — aucun html2canvas, aucun problème de largeur
+    // Coordonnées en mm, identique au Java InvoicePdfService
+    // ────────────────────────────────────────────────────────────
+    const doc  = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+    const PW   = 210;
+    const ML   = 13; const MT = 13; const MR = 13;
+    const CW   = PW - ML - MR; // 184mm
 
-    const tdHtml = (inv.lines || []).map((l: any) => {
-      const disc = l.discountPercent > 0 ? ` <span class="disc">(-${l.discountPercent}%)</span>` : '';
-      if (isMvt) {
-        return `<tr><td>${l.description || '-'}</td><td class="r">${l.quantity}</td></tr>`;
-      }
-      return `<tr>
-        <td>${l.description || '-'}${disc}</td>
-        <td class="r">${l.quantity}</td>
-        <td class="c">${l.dimension || ''}</td>
-        <td class="r">${f3(l.unitPrice)}</td>
-        <td class="r">${f3(l.totalHT)}</td>
-      </tr>`;
-    }).join('');
+    // helpers
+    const blue  = () => doc.setTextColor(26, 58, 143);
+    const black = () => doc.setTextColor(0, 0, 0);
+    const rT    = (s: string, xR: number, y: number) => doc.text(s, xR - doc.getTextWidth(s), y);
+    const cT    = (s: string, cx: number, y: number) => doc.text(s, cx - doc.getTextWidth(s) / 2, y);
+    const sp    = (s: string, w: number): string[]   => doc.splitTextToSize(s || '-', w);
 
-    // ── Totaux ────────────────────────────────────────────────
-    const totHtml = isMvt ? '' : `
-      <div class="tot-wrap">
-        <div class="tots">
-          <div class="tot"><span>Total HT</span><span>${f3(inv.totalHT)} ${cur}</span></div>
-          ${showDiscount ? `<div class="tot"><span>Remise (${inv.globalDiscount}%)</span><span>- ${f3((inv.totalHT||0)*(inv.globalDiscount||0)/100)} ${cur}</span></div>` : ''}
-          ${showTVA      ? `<div class="tot"><span>TVA (${inv.taxRate}%)</span><span>${f3(inv.totalTVA)} ${cur}</span></div>` : ''}
-          <div class="tot"><span>Timbre fiscal</span><span>${f3(inv.stampDuty)} ${cur}</span></div>
-          <div class="tot grand"><span>TOTAL TTC</span><span>${f3(inv.totalTTC)} ${cur}</span></div>
-        </div>
-      </div>`;
+    // ── HEADER ───────────────────────────────────────────────
+    const midX  = ML + CW * 0.68; // séparateur vertical ~138mm
+    const leftW = midX - ML;      // colonne gauche ~125mm
+    const rX    = midX + 2;       // colonne droite X
+    const rW    = PW - MR - rX;   // colonne droite largeur ~57mm
+    const lh    = 4.6;            // interligne standard
 
-    // ── CSS — layout identique au PDF Java ────────────────────
-    const W = this.A4_W_PX;
-    const css = `
-      * { box-sizing: border-box; margin: 0; padding: 0; }
-      body { margin: 0; padding: 0; width: ${W}px; }
+    // Pré-calcul hauteur ligne 2 (société + client)
+    const coLines: Array<{ t: string; sz: number; bold: boolean; italic: boolean }> = [];
+    coLines.push({ t: companyName,    sz: 12, bold: true,  italic: false });
+    if (co.address) sp(co.address, leftW - 6).forEach((l: string) =>
+      coLines.push({ t: l, sz: 9, bold: false, italic: true }));
+    if (co.nif)   coLines.push({ t: `MF : ${co.nif}`,   sz: 9.5, bold: true, italic: false });
+    if (co.rib)   coLines.push({ t: `RIB : ${co.rib}`,  sz: 9.5, bold: true, italic: false });
+    if (co.phone) coLines.push({ t: `GSM : ${co.phone}`,sz: 9.5, bold: true, italic: false });
+    const r2LeftH = coLines.length * lh + 6;
 
-      .a4 {
-        font-family: Arial, Helvetica, sans-serif;
-        background: #fff; color: #000;
-        width: ${W}px; padding: 36px 38px;
-        font-size: 11px; line-height: 1.4;
-      }
+    const clLines: Array<{ t: string; sz: number; bold: boolean }> = [];
+    clLines.push({ t: `${clientLabel} :`, sz: 9,  bold: true  });
+    clLines.push({ t: partyName,          sz: 10, bold: true  });
+    if (partyNif) clLines.push({ t: `MF : ${partyNif}`, sz: 9, bold: false });
+    if (partyAddress) sp(`Adresse : ${partyAddress}`, rW - 2)
+      .forEach((l: string) => clLines.push({ t: l, sz: 9, bold: false }));
+    const r2H = Math.max(r2LeftH, clLines.length * lh + 6);
 
-      /* ── HEADER 2×2 (table HTML pour fiabilité html2canvas) ── */
-      .hdr { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-      .hdr td { border: 0.6px solid #000; padding: 8px 10px; vertical-align: top; }
-      .hdr-logo { width: 54%; }
-      .hdr-logo img { max-width: 210px; max-height: 90px; object-fit: contain; display: block; }
-      .hdr-doctype { width: 46%; text-align: right; vertical-align: middle; }
-      .hdr-doctype-title { font-size: 17px; font-weight: 900; color: #1a3a8f; }
-      .hdr-doctype-line  { font-size: 10.5px; margin-top: 4px; }
-      .hdr-co { font-family: 'Times New Roman', Times, serif; color: #1a3a8f; }
-      .hdr-co-name { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
-      .hdr-co-sub  { font-size: 9.5px; font-style: italic; }
-      .hdr-co-line { font-size: 10px; font-weight: 700; margin-top: 3px; }
-      .hdr-cl-label { font-size: 10px; font-weight: 700; color: #1a3a8f; margin-bottom: 4px; }
-      .hdr-cl-name  { font-size: 11px; font-weight: 700; margin-bottom: 3px; }
-      .hdr-cl-line  { font-size: 10px; margin-top: 2px; }
+    // Hauteur ligne 1 (logo + type/N°/date)
+    const logoAreaH = (co.logo && co.logo.includes(',')) ? 22 : 0;
+    let r1RH = 7 + lh; // type label
+    if (inv.number) r1RH += lh;
+    r1RH += lh; // date
+    if (inv.dueDate) r1RH += lh;
+    const r1H    = Math.max(logoAreaH + 4, r1RH + 6);
+    const hdrH   = r1H + r2H;
+    const r1BotY = MT + r1H;
+    const hdrBotY= MT + hdrH;
 
-      /* ── TABLE PRODUITS ── */
-      table.tbl { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 11.5px; margin-bottom: 10px; border-top: 2px solid #1a3a8f; }
-      table.tbl thead { background: #ebf0ff; }
-      table.tbl th { font-weight: 700; color: #1a3a8f; padding: 6px 4px; border-bottom: 2px solid #1a3a8f; text-align: left; }
-      table.tbl th.r { text-align: right; }
-      table.tbl th.c { text-align: center; }
-      table.tbl td { padding: 5px 4px; vertical-align: top; border-bottom: 1px solid #d2dcf0; overflow-wrap: break-word; word-break: break-word; }
-      table.tbl td.r { text-align: right; }
-      table.tbl td.c { text-align: center; }
-      table.tbl tbody tr:last-child td { border-bottom: none; }
-      .disc { color: #b00; font-size: 10px; }
+    // Bordures header
+    doc.setDrawColor(0); doc.setLineWidth(0.3);
+    doc.rect(ML, MT, CW, hdrH);
+    doc.line(midX, MT, midX, hdrBotY);
+    doc.line(ML, r1BotY, PW - MR, r1BotY);
 
-      /* ── TOTAUX (colonne droite) ── */
-      .tot-wrap { display: flex; justify-content: flex-end; margin-top: 14px; }
-      .tots { width: 265px; }
-      .tot { display: flex; justify-content: space-between; padding: 4px 0; font-size: 11.5px; border-bottom: 1px solid #e8ecf4; }
-      .tot:last-child { border-bottom: none; }
-      .tot.grand { font-weight: 700; border-top: 2px solid #000; border-bottom: none; padding-top: 7px; margin-top: 2px; }
-
-      /* ── MONTANT EN LETTRES ── */
-      .words { font-size: 11px; font-style: italic; margin: 12px 0 0; }
-
-      /* ── NOTES / EXTRA ── */
-      .notes { font-size: 11px; color: #333; margin: 12px 0; }
-      .extra { font-size: 11.5px; margin: 12px 0; }
-
-      /* ── SIGNATURE ── */
-      .sig { text-align: right; margin-top: 28px; font-size: 10.5px; font-weight: 700; color: #000; }
-    `;
-
-    // ── HTML — layout identique au PDF Java ──────────────────
-    const bodyHtml = `
-      <div class="a4">
-        <!-- HEADER 2×2 bordé -->
-        <table class="hdr" cellspacing="0" cellpadding="0">
-          <tr>
-            <td class="hdr-logo">
-              ${co.logo ? `<img src="${co.logo}" alt="logo" />` : '&nbsp;'}
-            </td>
-            <td class="hdr-doctype">
-              <div class="hdr-doctype-title">${typeLabel}</div>
-              ${inv.number ? `<div class="hdr-doctype-line">N° : ${inv.number}</div>` : ''}
-              <div class="hdr-doctype-line">Date : ${dateStr}</div>
-              ${inv.dueDate ? `<div class="hdr-doctype-line">Échéance : ${new Date(inv.dueDate).toLocaleDateString('fr-FR')}</div>` : ''}
-            </td>
-          </tr>
-          <tr>
-            <td class="hdr-co">
-              <div class="hdr-co-name">${companyName}</div>
-              ${co.address ? `<div class="hdr-co-sub">${co.address}</div>` : ''}
-              ${co.nif   ? `<div class="hdr-co-line">MF : ${co.nif}</div>`   : ''}
-              ${co.rib   ? `<div class="hdr-co-line">RIB : ${co.rib}</div>`  : ''}
-              ${co.phone ? `<div class="hdr-co-line">GSM : ${co.phone}</div>`: ''}
-            </td>
-            <td>
-              <div class="hdr-cl-label">${clientLabel} :</div>
-              <div class="hdr-cl-name">${partyName}</div>
-              ${partyNif     ? `<div class="hdr-cl-line">MF : ${partyNif}</div>`         : ''}
-              ${partyAddress ? `<div class="hdr-cl-line">Adresse : ${partyAddress}</div>`: ''}
-            </td>
-          </tr>
-        </table>
-
-        <!-- TABLEAU PRODUITS -->
-        <table class="tbl">
-          <thead>${thHtml}</thead>
-          <tbody>${tdHtml}</tbody>
-        </table>
-
-        <!-- NOTES -->
-        ${inv.notes ? `<div class="notes">Notes : ${inv.notes}</div>` : ''}
-
-        <!-- CHAUFFEUR / CAMION (Bon de Livraison) -->
-        ${isBonLivraison && (inv.driverName || inv.truckPlate) ? `
-        <div class="extra">
-          ${inv.driverName ? `Nom de chauffeur : ${inv.driverName}<br>` : ''}
-          ${inv.truckPlate ? `Série de camion : ${inv.truckPlate}`      : ''}
-        </div>` : ''}
-
-        <!-- TOTAUX -->
-        ${totHtml}
-
-        <!-- MONTANT EN LETTRES -->
-        ${!isMvt ? `<div class="words">Arrêté ${docWord} à la somme de ${amountWords}.</div>` : ''}
-
-        <!-- SIGNATURE -->
-        ${!isMvt ? `<div class="sig">Signature et cachet :</div>` : ''}
-      </div>`;
-
-    // ── Rendu iframe isolé (immunisé contre les CSS PrimeNG) ──
-    const iframe = document.createElement('iframe');
-    // position:absolute évite le bug de viewport sur position:fixed hors-écran
-    iframe.style.cssText = `position:absolute;left:-9999px;top:0;width:${W}px;height:200px;border:0;visibility:hidden;`;
-    document.body.appendChild(iframe);
-
-    try {
-      const idoc = iframe.contentDocument!;
-      idoc.open();
-      // La largeur est forcée sur html+body pour que offsetWidth == A4_W_PX
-      idoc.write(`<!doctype html><html><head><meta charset="utf-8">
-        <style>html,body{margin:0;padding:0;width:${W}px;}${css}</style>
-        </head><body>${bodyHtml}</body></html>`);
-      idoc.close();
-
-      // Attendre le rendu complet (images + polices)
-      await new Promise(r => setTimeout(r, 350));
-
-      const target = idoc.querySelector('.a4') as HTMLElement;
-      const h = target.offsetHeight;
-      iframe.style.height = h + 'px';
-
-      const canvas = await html2canvas(target, {
-        scale: 2,
-        backgroundColor: '#ffffff',
-        useCORS: true,
-        width: W,          // largeur fixe — pas scrollWidth (bugué hors-écran)
-        height: h,
-        windowWidth: W,
-        windowHeight: h,
-      });
-
-      const pdfW = 210;
-      const pdfH = Math.ceil((canvas.height / canvas.width) * pdfW * 100) / 100;
-      const pdf  = new jsPDF({ unit: 'mm', format: [pdfW, pdfH], orientation: 'portrait' });
-      pdf.addImage(canvas.toDataURL('image/jpeg', 0.97), 'JPEG', 0, 0, pdfW, pdfH);
-      pdf.save(`${typeLabel.replace(/ /g, '_')}-${inv.number || 'document'}.pdf`);
-    } finally {
-      document.body.removeChild(iframe);
+    // Logo
+    if (co.logo && co.logo.includes(',')) {
+      try {
+        const fmt  = co.logo.startsWith('data:image/png') ? 'PNG' : 'JPEG';
+        const img  = new Image();
+        await new Promise<void>(res => { img.onload = () => res(); img.onerror = () => res(); img.src = co.logo; });
+        if (img.naturalWidth > 0) {
+          const maxW = leftW - 4; const maxH = logoAreaH;
+          let iw = maxW; let ih = iw * img.naturalHeight / img.naturalWidth;
+          if (ih > maxH) { ih = maxH; iw = ih * img.naturalWidth / img.naturalHeight; }
+          doc.addImage(co.logo, fmt, ML + 2, MT + (r1H - ih) / 2, iw, ih);
+        }
+      } catch (_) {}
     }
+
+    // Type label (droite, row 1)
+    let ry = MT + 5;
+    doc.setFontSize(16); doc.setFont('helvetica', 'bold'); blue();
+    rT(typeLabel, PW - MR - 2, ry); ry += 7;
+    doc.setFontSize(10); doc.setFont('helvetica', 'normal'); black();
+    if (inv.number) { rT(`N° : ${inv.number}`, PW - MR - 2, ry); ry += lh; }
+    rT(`Date : ${dateStr}`, PW - MR - 2, ry); ry += lh;
+    if (inv.dueDate) rT(`Échéance : ${new Date(inv.dueDate).toLocaleDateString('fr-FR')}`, PW - MR - 2, ry);
+
+    // Société (gauche, row 2)
+    let ly = r1BotY + 4;
+    for (const cl of coLines) {
+      doc.setFontSize(cl.sz);
+      doc.setFont('times', cl.bold && cl.italic ? 'bolditalic' : cl.bold ? 'bold' : cl.italic ? 'italic' : 'normal');
+      blue();
+      doc.text(cl.t, ML + 2, ly); ly += (cl.sz >= 12 ? 5 : lh);
+    }
+
+    // Client (droite, row 2)
+    let cly = r1BotY + 4;
+    for (let i = 0; i < clLines.length; i++) {
+      const cl = clLines[i];
+      doc.setFontSize(cl.sz);
+      doc.setFont('helvetica', cl.bold ? 'bold' : 'normal');
+      i === 0 ? blue() : black();
+      doc.text(cl.t, rX, cly); cly += lh + (i < 2 ? 0.5 : 0);
+    }
+
+    let y = hdrBotY + 8;
+
+    // ── TABLE ────────────────────────────────────────────────
+    const colW = isMvt
+      ? [CW * 0.80, CW * 0.20]
+      : [CW * 0.37, CW * 0.09, CW * 0.16, CW * 0.19, CW * 0.19];
+    const colX = [ML];
+    for (let i = 0; i < colW.length - 1; i++) colX.push(colX[i] + colW[i]);
+
+    // En-tête tableau
+    doc.setFillColor(235, 240, 255);
+    doc.rect(ML, y - 3.5, CW, 7.5, 'F');
+    doc.setFontSize(10); doc.setFont('helvetica', 'bold'); blue();
+    doc.text('Désignation', colX[0] + 1, y);
+    rT('QTE', colX[1] + colW[1], y);
+    if (!isMvt) {
+      cT('DIM', colX[2] + colW[2] / 2, y);
+      rT('P.unitaire', colX[3] + colW[3], y);
+      rT('P.total',    colX[4] + colW[4], y);
+    }
+    y += 1;
+    doc.setDrawColor(26, 58, 143); doc.setLineWidth(0.8);
+    doc.line(ML, y, PW - MR, y);
+    doc.setDrawColor(200, 215, 240); doc.setLineWidth(0.25);
+    y += 5;
+
+    // Lignes produits
+    doc.setFontSize(10.5); doc.setFont('helvetica', 'normal'); black();
+    const invLines = inv.lines || [];
+    for (let i = 0; i < invLines.length; i++) {
+      const l = invLines[i];
+      let desc = l.description || '-';
+      if (l.discountPercent > 0) desc += ` (-${l.discountPercent}%)`;
+      const dLines = sp(desc, colW[0] - 3);
+      const rowH   = Math.max(6, dLines.length * 5 + 2);
+      dLines.forEach((dl: string, di: number) => doc.text(dl, colX[0] + 1, y + di * 5));
+      rT(String(l.quantity), colX[1] + colW[1], y);
+      if (!isMvt) {
+        if (l.dimension) cT(String(l.dimension), colX[2] + colW[2] / 2, y);
+        rT(f3(l.unitPrice), colX[3] + colW[3], y);
+        rT(f3(l.totalHT),   colX[4] + colW[4], y);
+      }
+      y += rowH;
+      if (i < invLines.length - 1) doc.line(ML, y - 1.5, PW - MR, y - 1.5);
+    }
+    y += 4;
+
+    // Notes
+    if (inv.notes) {
+      doc.setFontSize(10); doc.setFont('helvetica', 'normal'); black();
+      sp(`Notes : ${inv.notes}`, CW).forEach((nl: string) => { doc.text(nl, ML, y); y += 5; });
+      y += 2;
+    }
+
+    // Chauffeur / camion (Bon de Livraison)
+    if (isBonLivraison && (inv.driverName || inv.truckPlate)) {
+      doc.setFontSize(10.5); doc.setFont('helvetica', 'normal'); black();
+      if (inv.driverName) { doc.text(`Nom de chauffeur : ${inv.driverName}`, ML, y); y += 5; }
+      if (inv.truckPlate) { doc.text(`Série de camion : ${inv.truckPlate}`, ML, y); y += 5; }
+      y += 2;
+    }
+
+    // ── TOTAUX ───────────────────────────────────────────────
+    if (!isMvt) {
+      y += 6;
+      const totX   = PW - MR - 90;
+      const totLH  = 5.5;
+      const totRow = (label: string, value: string, bold = false, sz = 10.5) => {
+        doc.setFontSize(sz); doc.setFont('helvetica', bold ? 'bold' : 'normal'); black();
+        doc.text(label, totX, y);
+        rT(value, PW - MR, y);
+        y += totLH;
+      };
+
+      totRow('Total HT', `${f3(inv.totalHT)} ${cur}`);
+      if (showDiscount) totRow(
+        `Remise (${inv.globalDiscount}%)`,
+        `- ${f3((inv.totalHT||0)*(inv.globalDiscount||0)/100)} ${cur}`
+      );
+      if (showTVA) totRow(`TVA (${inv.taxRate}%)`, `${f3(inv.totalTVA)} ${cur}`);
+      totRow('Timbre fiscal', `${f3(inv.stampDuty)} ${cur}`);
+
+      doc.setDrawColor(0); doc.setLineWidth(0.5);
+      doc.line(totX, y - 1.5, PW - MR, y - 1.5);
+      totRow('TOTAL TTC', `${f3(inv.totalTTC)} ${cur}`, true, 12);
+
+      // Montant en lettres
+      doc.setFontSize(9.5); doc.setFont('helvetica', 'oblique'); black();
+      sp(amountWords, 95).forEach((wl: string) => { doc.text(wl, totX, y); y += 4.5; });
+
+      // Signature
+      y += 10;
+      doc.setFontSize(9.5); doc.setFont('helvetica', 'bold'); black();
+      rT('Signature et cachet :', PW - MR, y);
+    }
+
+    doc.save(`${typeLabel.replace(/ /g, '_')}-${inv.number || 'document'}.pdf`);
   }
 }
