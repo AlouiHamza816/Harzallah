@@ -551,7 +551,6 @@ export class ThermalPrintService {
         rT(f3(l.totalHT),   colX[4] + colW[4], y);
       }
       y += rowH;
-      if (i < invLines.length - 1) doc.line(ML, y - 1.5, PW - MR, y - 1.5);
     }
     y += 4;
 
