@@ -74,6 +74,9 @@ export class ApiService {
   getInvoicePdf(id: number): Observable<Blob> {
     return this.http.get(`${this.base}/invoices/${id}/pdf`, { responseType: 'blob' });
   }
+  getPublicInvoice(id: number): Observable<Invoice> {
+    return this.http.get<Invoice>(`${this.base}/public/invoices/${id}`);
+  }
   getPublicInvoicePdf(id: number): Observable<Blob> {
     return this.http.get(`${this.base}/public/invoices/${id}/pdf`, { responseType: 'blob' });
   }

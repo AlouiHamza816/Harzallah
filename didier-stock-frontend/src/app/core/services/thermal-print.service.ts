@@ -53,14 +53,25 @@ export class ThermalPrintService {
         window.URL.revokeObjectURL(url);
       },
       error: () => {
-        // Fall back to the client-side renderer if the server endpoint is unreachable.
-        if (this.settings) {
-          this.doPrintA4(inv);
+        // Fall back to the client-side renderer.
+        // If the invoice was loaded from the list it won't have lines — fetch the full record first.
+        const doPrint = (fullInv: any) => {
+          if (this.settings) {
+            this.doPrintA4(fullInv);
+          } else {
+            this.api.getCompanySettings().subscribe({
+              next: s => { this.settings = s; this.currency = s.currency || 'TND'; this.doPrintA4(fullInv); },
+              error: () => { this.settings = {}; this.doPrintA4(fullInv); }
+            });
+          }
+        };
+        if (inv.lines) {
+          doPrint(inv);
         } else {
-          this.api.getCompanySettings().subscribe({
-            next: s => { this.settings = s; this.currency = s.currency || 'TND'; this.doPrintA4(inv); },
-            error: () => { this.settings = {}; this.doPrintA4(inv); }
-          });
+          const inv$ = this.auth.getToken()
+            ? this.api.getInvoice(inv.id)
+            : this.api.getPublicInvoice(inv.id);
+          inv$.subscribe({ next: fullInv => doPrint(fullInv), error: () => doPrint(inv) });
         }
       }
     });
